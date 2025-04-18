@@ -1,0 +1,450 @@
+# Dangelmaiers Proxmox Configuration Example
+# ----------------------------------------------
+# This file contains standard configuration settings for Proxmox VE
+# Version: 1.0
+
+#############################
+# 1. NODE IDENTIFICATION
+#############################
+
+# Node name in the cluster (required)
+node_name: pve-node01
+
+# Node description (optional)
+node_description: "Production Proxmox node in main datacenter"
+
+# Node role (e.g., compute, storage, management)
+node_role: compute
+
+# Node location (e.g., datacenter, rack)
+node_location: "DC1-Rack03-U42"
+
+#############################
+# 2. NETWORK CONFIGURATION
+#############################
+
+# Management Network Bridge
+# This is the primary network interface for Proxmox management
+network:
+  vmbr0:
+    address: 10.10.10.2/24
+    gateway: 10.10.10.1
+    bridge_ports: eno1
+    bridge_stp: off
+    bridge_fd: 0
+    comment: "Management Network"
+
+  # Storage Network Bridge
+  # Dedicated network for storage traffic
+  vmbr1:
+    address: 10.40.40.2/24
+    bridge_ports: eno2
+    bridge_stp: off
+    bridge_fd: 0
+    comment: "Storage Network"
+
+  # VM/Container Network Bridge
+  # Network for VM and container traffic
+  vmbr2:
+    address: 10.20.20.2/24
+    bridge_ports: eno3
+    bridge_stp: off
+    bridge_fd: 0
+    comment: "VM/Container Network"
+
+# VLAN Configuration
+vlans:
+  - id: 10
+    name: "Management"
+    subnet: "10.10.10.0/24"
+    gateway: "10.10.10.1"
+  - id: 20
+    name: "Production"
+    subnet: "10.20.20.0/24"
+    gateway: "10.20.20.1"
+  - id: 30
+    name: "Development"
+    subnet: "10.30.30.0/24"
+    gateway: "10.30.30.1"
+  - id: 40
+    name: "Storage"
+    subnet: "10.40.40.0/24"
+    gateway: "10.40.40.1"
+
+# DNS Configuration
+dns:
+  nameserver1: 10.10.10.10
+  nameserver2: 10.10.10.11
+  search_domain: dangelmaiers.local
+
+#############################
+# 3. STORAGE CONFIGURATION
+#############################
+
+# Local LVM Storage
+storage:
+  local-lvm:
+    type: lvmthin
+    volume_group: pve
+    thinpool: data
+    content: ["images", "rootdir"]
+    nodes: all
+    disable: 0
+    is_backup_destination: 1
+
+  # ZFS Storage
+  local-zfs:
+    type: zfspool
+    pool: tank
+    content: ["images", "rootdir"]
+    nodes: all
+    sparse: 1
+    disable: 0
+    is_backup_destination: 1
+
+  # NFS Storage for ISOs
+  nfs-iso:
+    type: nfs
+    server: 10.40.40.20
+    export: /mnt/nfs/iso
+    content: ["iso"]
+    nodes: all
+    disable: 0
+    maxfiles: 0
+    is_backup_destination: 0
+
+  # Backup Storage
+  backup:
+    type: nfs
+    server: 10.40.40.20
+    export: /mnt/nfs/backup
+    content: ["backup"]
+    nodes: all
+    disable: 0
+    is_backup_destination: 1
+
+#############################
+# 4. CLUSTER SETTINGS
+#############################
+
+cluster:
+  name: dangelmaiers-cluster
+  
+  # Cluster network
+  network: 10.10.10.0/24
+  
+  # Quorum settings
+  quorum_votes: 2
+  
+  # HA settings
+  ha:
+    enabled: 1
+    watchdog: /dev/watchdog
+    groups:
+      - name: production
+        nodes: ["pve-node01", "pve-node02", "pve-node03"]
+        restricted: 0
+        nofailback: 0
+
+#############################
+# 5. VM DEFAULT SETTINGS
+#############################
+
+vm_defaults:
+  # Default VM resources
+  cores: 2
+  memory: 4096
+  sockets: 1
+  
+  # CPU type
+  cpu_type: host
+  
+  # SCSI controller
+  scsihw: virtio-scsi-single
+  
+  # Boot order
+  boot: order=scsi0;net0
+  
+  # Other settings
+  agent: 1
+  onboot: 1
+
+# Container default settings
+ct_defaults:
+  memory: 2048
+  swap: 512
+  net0: name=eth0,bridge=vmbr0,ip=dhcp
+  storage: local-lvm:8
+
+# Resource allocation limits
+resource_limits:
+  # CPU overcommit ratio (virtual:physical)
+  cpu_overcommit_ratio: 4
+  
+  # Memory overcommit ratio (virtual:physical)
+  memory_overcommit_ratio: 1.5
+
+#############################
+# 6. SECURITY SETTINGS
+#############################
+
+security:
+  # Firewall configuration
+  firewall:
+    enabled: 1
+    log_level: info
+    
+  # SSH settings
+  ssh:
+    port: 22
+    protocol: 2
+    permit_root_login: no
+    password_authentication: no
+    
+  # Authentication
+  authentication:
+    # LDAP configuration
+    ldap:
+      server: ldap://ldap.dangelmaiers.local
+      base_dn: dc=dangelmaiers,dc=local
+      user_attribute: uid
+      bind_dn: cn=proxmox,ou=services,dc=dangelmaiers,dc=local
+      # Note: Don't store actual password in this example file
+      bind_password: EXAMPLE_PASSWORD_CHANGE_ME
+      
+  # Access control
+  access_control:
+    # IP-based restrictions
+    allowed_networks:
+      - 10.10.10.0/24
+      - 10.20.20.0/24
+
+#############################
+# BACKUP CONFIGURATION
+#############################
+
+backup:
+  # Schedule (cron format)
+  schedule: "0 2 * * *"
+  
+  # Storage to use
+  storage: backup
+  
+  # Retention policy
+  retention:
+    keep_last: 7
+    keep_daily: 7
+    keep_weekly: 4
+    keep_monthly: 1
+  
+  # Mode: snapshot, suspend, stop
+  mode: snapshot
+  
+  # Compression
+  compress: 1
+
+#############################
+# DANGELMAIERS SPECIFIC
+#############################
+
+dangelmaiers:
+  # Department responsible
+  department: IT
+  
+  # Environment (production, testing, development)
+  environment: production
+  
+  # Contact
+  contact_email: infrastructure@dangelmaiers.local
+  
+  # Tags
+  tags: ["proxmox", "virtualization", "managed"]
+
+# Dangelmaiers Proxmox Configuration File
+# This is an example configuration file for Proxmox Virtual Environment
+# Version: 1.0
+
+#######################
+# CLUSTER CONFIGURATION
+#######################
+
+# Cluster name
+cluster:
+  name: dangelmaiers-cluster
+  # Quorum votes
+  quorum_votes: 2
+  # High availability settings
+  ha_enabled: true
+  # Watchdog device
+  watchdog_device: /dev/watchdog
+
+####################
+# NETWORK SETTINGS
+####################
+
+network:
+  # Management interface
+  management:
+    interface: vmbr0
+    address: 10.10.10.2/24
+    gateway: 10.10.10.1
+    bridge_ports: eno1
+    bridge_stp: off
+    bridge_fd: 0
+
+  # Storage network
+  storage:
+    interface: vmbr1
+    address: 10.40.40.2/24
+    bridge_ports: eno2
+    bridge_stp: off
+    bridge_fd: 0
+
+  # VM/CT network
+  vm_network:
+    interface: vmbr2
+    address: 10.20.20.2/24
+    bridge_ports: eno3
+    bridge_stp: off
+    bridge_fd: 0
+
+  # VLAN configuration
+  vlans:
+    - id: 10
+      purpose: "Management"
+      subnet: "10.10.10.0/24"
+      gateway: "10.10.10.1"
+    - id: 20
+      purpose: "Production"
+      subnet: "10.20.20.0/24"
+      gateway: "10.20.20.1"
+    - id: 30
+      purpose: "Development"
+      subnet: "10.30.30.0/24"
+      gateway: "10.30.30.1"
+    - id: 40
+      purpose: "Storage"
+      subnet: "10.40.40.0/24"
+      gateway: "10.40.40.1"
+
+####################
+# STORAGE SETTINGS
+####################
+
+storage:
+  # Local LVM storage
+  local_lvm:
+    type: lvmthin
+    vgname: pve
+    thinpool: data
+    content: ["images", "rootdir"]
+    shared: 0
+    nodes: all
+
+  # ZFS storage
+  zfs:
+    type: zfspool
+    pool: tank
+    content: ["images", "rootdir"]
+    sparse: 1
+    nodes: all
+
+  # Ceph storage (if applicable)
+  ceph:
+    type: rbd
+    monhost: 10.40.40.10,10.40.40.11,10.40.40.12
+    pool: rbd
+    content: ["images"]
+    krbd: 1
+    nodes: all
+
+  # NFS storage for ISOs and templates
+  nfs:
+    type: nfs
+    server: 10.40.40.20
+    export: /mnt/nfs/proxmox
+    content: ["iso", "vztmpl"]
+    nodes: all
+
+#########################
+# VM/CONTAINER DEFAULTS
+#########################
+
+vm_defaults:
+  # Default settings for VMs
+  resources:
+    cores: 2
+    sockets: 1
+    memory: 4096
+    balloon: 1
+    # Boot order
+    boot: "order=scsi0;net0"
+    # SCSI controller
+    scsihw: "virtio-scsi-pci"
+    # CPU type
+    cpu: "host"
+
+  # Default settings for containers (CTs)
+  container:
+    memory: 2048
+    swap: 512
+    # Network
+    net0: "name=eth0,bridge=vmbr0,ip=dhcp"
+    # Storage
+    rootfs: "local-lvm:8"
+
+###################
+# SECURITY SETTINGS
+###################
+
+security:
+  # Firewall defaults
+  firewall:
+    enabled: 1
+    log_level: "info"
+    enable_ipfilter: 1
+    enable_mac_filter: 1
+
+  # Authentication
+  authentication:
+    type: "pve"
+    realm: "pve"
+    # LDAP configuration (uncomment to enable)
+    # ldap_server: "ldap://ldap.dangelmaiers.local"
+    # ldap_base_dn: "dc=dangelmaiers,dc=local"
+    # ldap_user_attr: "uid"
+    # ldap_bind_dn: "cn=proxmox,ou=services,dc=dangelmaiers,dc=local"
+    # ldap_bind_password: "CHANGE_THIS_PASSWORD"
+
+######################
+# BACKUP CONFIGURATION
+######################
+
+backup:
+  # Storage for backups
+  storage: "local-zfs"
+  # Compression algorithm
+  compress: "zstd"
+  # Mode (snapshot, suspend, stop)
+  mode: "snapshot"
+  # Schedule (time range in cron format)
+  schedule: "0 2 * * *"
+  # Retention
+  retention: 
+    keep_last: 7    # Keep the last 7 backups
+    keep_daily: 7   # Keep daily backups for 7 days
+
+########################
+# DANGELMAIERS SPECIFIC
+########################
+
+organization:
+  # Department responsible for this node/cluster
+  department: "IT Infrastructure"
+  # Contact information
+  contact: "infrastructure@dangelmaiers.local"
+  # Environment type (production, testing, development)
+  environment: "production"
+  # Tags for this node/cluster
+  tags: "dangelmaiers,managed,proxmox"
+
